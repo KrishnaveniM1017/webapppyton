@@ -1,8 +1,15 @@
 from flask import Flask, render_template_string, request, redirect, url_for
+import pymssql  # Add this import for SQL connection
 
 app = Flask(__name__)
 
-# HTML content for the login page (instead of using a separate HTML file)
+# SQL Database connection settings
+DB_SERVER = "bcghoutdn-server.database.windows.net"  # Example: myserver.database.windows.net
+DB_DATABASE = "bcghoutdn-database"
+DB_USERNAME = "bcghoutdn-server-admin"
+DB_PASSWORD = "HVilA$7mzRVR$Ujg"
+
+# HTML content for the login page
 login_html = """
 <!DOCTYPE html>
 <html lang="en">
@@ -37,10 +44,40 @@ def login():
     username = request.form['username']
     password = request.form['password']
     
-    # If both fields are filled, redirect to the greeting page
     if username and password:
+        # Save username and password into SQL database
+        try:
+            conn = pymssql.connect(
+                server=DB_SERVER,
+                user=DB_USERNAME,
+                password=DB_PASSWORD,
+                database=DB_DATABASE
+            )
+            cursor = conn.cursor()
+
+            # You can create table if not exists (optional first time)
+            cursor.execute("""
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='users' AND xtype='U')
+            CREATE TABLE users (
+                id INT PRIMARY KEY IDENTITY(1,1),
+                username NVARCHAR(255),
+                password NVARCHAR(255)
+            )
+            """)
+
+            # Insert the username and password
+            insert_query = "INSERT INTO users (username, password) VALUES (%s, %s)"
+            cursor.execute(insert_query, (username, password))
+            conn.commit()
+
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            return f"Database error: {str(e)}"
+        
         return redirect(url_for('hello', username=username))
-    return redirect(url_for('home'))  # Redirect back to login if inputs are empty
+    
+    return redirect(url_for('home'))
 
 # Route to display the greeting message
 @app.route('/hello/<username>')
